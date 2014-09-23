@@ -61,3 +61,12 @@ $RECYCLE.BIN/
 *.msi
 *.msm
 *.msp
+
+
+# My ignore files
+*.meta
+/ProjectSettings
+UnityVS.QtChat.sln.DotSettings
+/Assets/Scene
+/Assets/UnityVS
+/Assets/Image
