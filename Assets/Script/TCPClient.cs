@@ -24,14 +24,15 @@ public class TCPClient
     /// 非同期で接続要求を出す
     /// </summary>
     /// <param name="remoteIp">リモートIPアドレス</param>
-    public void ConnectAsync(IPAddress remoteIp)
+    public void ConnectAsync(IPAddress remoteIp, int port)
     {
         Thread t = new Thread(new ThreadStart(() =>
         {
-            client.Connect(remoteIp, 8888);
+            client.Connect(remoteIp, port);
         }));
         t.IsBackground = true;
         t.Start();
+        Deb.Log("接続を開始しました");
     }
 
     /// <summary>
@@ -46,5 +47,10 @@ public class TCPClient
     public NetworkStream GetStream()
     {
         return client.Connected ? client.GetStream() : null;
+    }
+
+    public void Close()
+    {
+        client.Close();
     }
 }

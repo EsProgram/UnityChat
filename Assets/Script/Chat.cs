@@ -5,58 +5,83 @@ using UnityEngine;
 
 public class Chat : MonoBehaviour
 {
+    private const int APP_PORT = 55555;
+
     private enum NetworkState
     {
         None,
         Server,
         Client,
+        Connecting,
     }
 
     private TCPServer server;
     private TCPClient client;
     private NetworkStream ns;
     private NetworkState state = NetworkState.None;
+    private string serverIP = string.Empty;
 
     private void Update()
     {
-        switch(state)
+        //クライアントが接続完了したら
+        if(state == NetworkState.Client && client.isConnected)
+            state = NetworkState.Connecting;
+        //サーバが接続完了したら
+        if(state == NetworkState.Server && server.isConnected)
+            state = NetworkState.Connecting;
+
+        //接続が完了したクライアント・サーバの動作
+        if(state == NetworkState.Connecting)
         {
-            case NetworkState.None:
-                break;
-
-            case NetworkState.Server:
-                if(server.Accepted) { }
-
-                break;
-
-            case NetworkState.Client:
-                if(client.isConnected) { }
-                break;
-
-            default:
-                break;
+            Debug.Log("もくひょーかんりょおおおおおおおお");
         }
+    }
+
+    private void OnApplicationQuit()
+    {
+        if(client != null)
+            client.Close();
+        if(server != null)
+            server.Close();
     }
 
     private void OnGUI()
     {
-        //サーバ・クライアントが決定していない状態だったら
-        if(state == NetworkState.None)
+        switch(state)
         {
-            //サーバになるボタン表示
-            if(GUI.Button(new Rect(10, 10, 150, 30), "サーバになる"))
-            {
-                state = NetworkState.Server;
-                server = new TCPServer();
-                server.AcceptConnectAsync();
-            }
-            //クライアントになるボタン表示
-            if(GUI.Button(new Rect(10, 50, 150, 30), "クライアントになる"))
-            {
-                state = NetworkState.Client;
-                client = new TCPClient();
-                client.ConnectAsync(IPAddress.Loopback);
-            }
+            case NetworkState.None:
+                //サーバになるボタン表示
+                if(GUI.Button(new Rect(Screen.width / 10, Screen.height / 10, 150, 30), "サーバになる"))
+                {
+                    state = NetworkState.Server;
+                    server = new TCPServer(APP_PORT);
+                    server.AcceptConnectAsync();
+                }
+                //クライアントになるボタン表示
+                if(GUI.Button(new Rect(Screen.width / 10, Screen.height / 5, 150, 30), "クライアントになる"))
+                {
+                    state = NetworkState.Client;
+                    client = new TCPClient();
+                }
+                break;
+
+            case NetworkState.Server:
+                GUI.TextField(new Rect(Screen.width / 5, Screen.height / 5, 100, 30), "接続を待っています");
+                break;
+
+            case NetworkState.Client:
+                serverIP = GUI.TextArea(new Rect(Screen.width / 10, Screen.height / 10, 150, 30), serverIP);
+                //接続ボタンを押したら接続する
+                if(GUI.Button(new Rect(Screen.width / 5, Screen.height / 5, 100, 30), "接続"))
+                    client.ConnectAsync(IPAddress.Parse(serverIP), APP_PORT);
+                break;
+
+            case NetworkState.Connecting:
+                //チャット欄を表示
+                break;
+
+            default:
+                break;
         }
     }
 }

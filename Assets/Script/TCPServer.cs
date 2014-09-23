@@ -24,9 +24,9 @@ public class TCPServer
     /// </summary>
     public bool Accepted { get; private set; }
 
-    public TCPServer()
+    public TCPServer(int port)
     {
-        listner = new TcpListener(IPAddress.Any, 8888);
+        listner = new TcpListener(IPAddress.Any, port);
         listner.Start();
         UnityEngine.Debug.Log("サーバを開始しました");
     }
@@ -63,20 +63,16 @@ public class TCPServer
     }
 
     /// <summary>
-    /// クライアントの接続を解除する
-    /// </summary>
-    public void CloseClient()
-    {
-        if(client != null)
-            client.Close();
-    }
-
-    /// <summary>
     /// サーバの接続を切断する
     /// </summary>
-    public void CloseServer()
+    public void Close()
     {
         if(listner != null)
             listner.Stop();
     }
+
+    /// <summary>
+    /// サーバに接続されているかどうかを返す
+    /// </summary>
+    public bool isConnected { get { return client == null ? false : client.Connected; } }
 }
