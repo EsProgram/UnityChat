@@ -14,7 +14,7 @@ using Deb = UnityEngine.Debug;
 /// <summary>
 /// 1対1の通信に対応する
 /// </summary>
-public class TCPServer
+public class TCPServer : ITCPBase
 {
     private TcpListener listner;
     private TcpClient client;
@@ -24,9 +24,9 @@ public class TCPServer
     /// </summary>
     public bool Accepted { get; private set; }
 
-    public TCPServer(int port)
+    public TCPServer(IPAddress localAddr, int port)
     {
-        listner = new TcpListener(IPAddress.Any, port);
+        listner = new TcpListener(localAddr, port);
         listner.Start();
         UnityEngine.Debug.Log("サーバを開始しました");
     }
@@ -37,7 +37,7 @@ public class TCPServer
     /// 既に接続されているクライアントが存在する場合は
     /// 何もしない
     /// </summary>
-    public void AcceptConnectAsync()
+    public void ConnectAsync()
     {
         if(client != null)
             return;

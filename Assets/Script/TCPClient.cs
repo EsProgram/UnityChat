@@ -7,28 +7,33 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
+
 using Deb = UnityEngine.Debug;
 
-public class TCPClient
+public class TCPClient : ITCPBase
 {
     private static TcpClient client;
+    private IPAddress addr;
+    private int port;
 
-    public TCPClient()
+    public TCPClient(IPAddress remoteAddr, int port)
     {
         client = new TcpClient();
         client.NoDelay = true;
         client.SendBufferSize = 0;
+        addr = remoteAddr;
+        this.port = port;
     }
 
     /// <summary>
     /// 非同期で接続要求を出す
     /// </summary>
     /// <param name="remoteIp">リモートIPアドレス</param>
-    public void ConnectAsync(IPAddress remoteIp, int port)
+    public void ConnectAsync()
     {
         Thread t = new Thread(new ThreadStart(() =>
         {
-            client.Connect(remoteIp, port);
+            client.Connect(addr, port);
         }));
         t.IsBackground = true;
         t.Start();
