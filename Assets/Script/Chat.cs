@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -10,6 +11,8 @@ using UnityEngine;
 public class Chat : MonoBehaviour
 {
     private const int APP_PORT = 55555;
+    private const int BYTE_SIZE = 1024;
+    private const int MESSAGE_SAVE_NUM = 20;
 
     private enum NetworkState
     {
@@ -25,11 +28,13 @@ public class Chat : MonoBehaviour
     private string serverIP = string.Empty;
     private bool connectTrigger;//接続完了した最初のフレームのみtrue
     private string send = string.Empty;//送信文字列
-    private byte[] sendByte = new byte[1024];
+    private byte[] sendByte = new byte[BYTE_SIZE];
     private string receive = string.Empty;//受信文字列
-    private byte[] receiveByte = new byte[1024];
+    private byte[] receiveByte = new byte[BYTE_SIZE];
+    private List<string> chat = new List<string>();
     private IAsyncResult sendResult;
     private IAsyncResult receiveResult;
+    private StringBuilder showMessageBuf = new StringBuilder();
 
     private void Update()
     {
@@ -48,6 +53,10 @@ public class Chat : MonoBehaviour
         if(state == NetworkState.Connecting)
             if(receiveResult == null || receiveResult.IsCompleted)
                 receiveResult = ns.BeginRead(receiveByte, 0, sendByte.Length, ReadCallback, null);
+
+        //メッセージ保存数を超えたら先頭を削除
+        if(chat.Count > MESSAGE_SAVE_NUM)
+            chat.RemoveAt(0);
     }
 
     private void OnApplicationQuit()
@@ -74,9 +83,7 @@ public class Chat : MonoBehaviour
                 }
                 //クライアントになるボタン表示
                 if(GUI.Button(new Rect(Screen.width / 10, Screen.height / 5, 150, 30), "クライアントになる"))
-                {
                     state = NetworkState.Client;
-                }
                 break;
 
             case NetworkState.Server:
@@ -94,14 +101,21 @@ public class Chat : MonoBehaviour
                 break;
 
             case NetworkState.Connecting:
-                //チャット欄を表示・テキスト送信
-                send = GUI.TextField(new Rect(10, 10, 100, 30), send);
-                GUI.TextField(new Rect(10, 110, 300, 200), receive);
+
+                //チャット欄に表示するメッセージの加工
+                showMessageBuf = new StringBuilder();
+                foreach(var s in chat)
+                    showMessageBuf.AppendLine(s);
+
+                //チャット欄・チャットウィンドウを表示
+                send = GUI.TextField(new Rect(10, 10, 300, 30), send, 50);
+                GUI.TextField(new Rect(10, 110, 300, 200), showMessageBuf.ToString());
 
                 //送信ボタン
                 if(sendResult == null || sendResult.IsCompleted)
-                    if(GUI.Button(new Rect(110, 10, 50, 30), "送信"))
+                    if(GUI.Button(new Rect(310, 10, 50, 30), "送信"))
                     {
+                        chat.Add(send);
                         sendByte = Encoding.UTF8.GetBytes(send);
                         sendResult = ns.BeginWrite(sendByte, 0, sendByte.Length, WriteCallback, null);
                         send = string.Empty;
@@ -122,8 +136,7 @@ public class Chat : MonoBehaviour
     {
         ns.EndRead(ar);
         receive = Encoding.UTF8.GetString(receiveByte);
-
-        //受信配列の初期化
-        receiveByte = new byte[1024];
+        chat.Add(receive);
+        receiveByte = new byte[BYTE_SIZE];
     }
 }
