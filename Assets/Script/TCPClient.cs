@@ -37,7 +37,7 @@ public class TCPClient : ITCPBase
         }));
         t.IsBackground = true;
         t.Start();
-        Deb.Log("接続を開始しました");
+        Deb.Log("Client : 接続を開始しました");
     }
 
     /// <summary>

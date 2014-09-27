@@ -28,7 +28,7 @@ public class TCPServer : ITCPBase
     {
         listner = new TcpListener(localAddr, port);
         listner.Start();
-        UnityEngine.Debug.Log("サーバを開始しました");
+        UnityEngine.Debug.Log("Server : サーバを開始しました");
     }
 
     /// <summary>
@@ -41,12 +41,12 @@ public class TCPServer : ITCPBase
     {
         if(client != null)
             return;
-        Deb.Log("接続を開始します");
+        Deb.Log("Server : 接続を開始します");
         Thread t = new Thread(new ThreadStart(() =>
         {
             client = listner.AcceptTcpClient();
             Accepted = true;
-            Deb.Log("接続が完了しました");
+            Deb.Log("Server : 接続が完了しました");
         }));
         t.IsBackground = true;
         t.Start();
