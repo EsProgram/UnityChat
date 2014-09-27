@@ -49,10 +49,12 @@ public class Chat : MonoBehaviour
         if(connectTrigger)
             ns = tcp.GetStream();
 
-        //受信動作
         if(state == NetworkState.Connecting)
+        {
+            //受信動作
             if(receiveResult == null || receiveResult.IsCompleted)
                 receiveResult = ns.BeginRead(receiveByte, 0, sendByte.Length, ReadCallback, null);
+        }
 
         //メッセージ保存数を超えたら先頭を削除
         if(chat.Count > MESSAGE_SAVE_NUM)
@@ -91,7 +93,7 @@ public class Chat : MonoBehaviour
                 break;
 
             case NetworkState.Client:
-                serverIP = GUI.TextArea(new Rect(Screen.width / 10, Screen.height / 10, 150, 30), serverIP);
+                serverIP = GUI.TextField(new Rect(Screen.width / 10, Screen.height / 10, 150, 30), serverIP);
                 //接続ボタンを押したら接続する
                 if(GUI.Button(new Rect(Screen.width / 5, Screen.height / 5, 100, 30), "接続"))
                 {
@@ -108,23 +110,34 @@ public class Chat : MonoBehaviour
                     showMessageBuf.AppendLine(s);
 
                 //チャット欄・チャットウィンドウを表示
-                send = GUI.TextField(new Rect(10, 10, 300, 30), send, 50);
-                GUI.TextField(new Rect(10, 110, 300, 200), showMessageBuf.ToString());
+                GUI.TextArea(new Rect(10, 110, 300, 200), showMessageBuf.ToString());
+                send = GUI.TextArea(new Rect(10, 10, 300, 30), send, 50);
 
-                //送信ボタン
-                if(sendResult == null || sendResult.IsCompleted)
-                    if(GUI.Button(new Rect(310, 10, 50, 30), "送信"))
-                    {
-                        chat.Add(send);
-                        sendByte = Encoding.UTF8.GetBytes(send);
-                        sendResult = ns.BeginWrite(sendByte, 0, sendByte.Length, WriteCallback, null);
-                        send = string.Empty;
-                    }
+                //送信
+                if(send.Contains('\n') || send.Contains('\r'))//なんかEnvironment.NewLineだと反応しない
+                {
+                    send = send.Split('\n', '\r')[0];
+                    SendChatMessage();
+                }
+                if(GUI.Button(new Rect(310, 10, 50, 30), "送信"))
+                    SendChatMessage();
                 break;
 
             default:
                 break;
         }
+    }
+
+    private void SendChatMessage()
+    {
+        if(sendResult == null || sendResult.IsCompleted)
+            if(send != string.Empty && !send.All(c => char.IsWhiteSpace(c)))
+            {
+                chat.Add(send);
+                sendByte = Encoding.UTF8.GetBytes(send);
+                sendResult = ns.BeginWrite(sendByte, 0, sendByte.Length, WriteCallback, null);
+                send = string.Empty;
+            }
     }
 
     private void WriteCallback(IAsyncResult ar)
