@@ -12,7 +12,7 @@ public class Chat : MonoBehaviour
 {
     private const int APP_PORT = 55555;
     private const int BYTE_SIZE = 1024;
-    private const int MESSAGE_SAVE_NUM = 20;
+    private const int MESSAGE_SAVE_NUM = 10;//チャット欄に残すメッセージ数
 
     private enum NetworkState
     {
@@ -47,7 +47,10 @@ public class Chat : MonoBehaviour
 
         //接続完了後1回のみ呼ばれる
         if(connectTrigger)
+        {
             ns = tcp.GetStream();
+            connectTrigger = false;
+        }
 
         if(state == NetworkState.Connecting)
         {
@@ -62,6 +65,16 @@ public class Chat : MonoBehaviour
     }
 
     private void OnApplicationQuit()
+    {
+        Close();
+    }
+
+    private void OnDestroy()
+    {
+        Close();
+    }
+
+    private void Close()
     {
         //ストリームを閉じる
         if(ns != null)
@@ -107,20 +120,20 @@ public class Chat : MonoBehaviour
                 //チャット欄に表示するメッセージの加工
                 showMessageBuf = new StringBuilder();
                 foreach(var s in chat)
-                    showMessageBuf.AppendLine(s);
+                    showMessageBuf.Append(s);
 
                 //チャット欄・チャットウィンドウを表示
                 GUI.TextArea(new Rect(10, 110, 300, 200), showMessageBuf.ToString());
-                send = GUI.TextArea(new Rect(10, 10, 300, 30), send, 50);
+                send = GUI.TextField(new Rect(10, 10, 300, 30), send, 20);
 
                 //送信
-                if(send.Contains('\n') || send.Contains('\r'))//なんかEnvironment.NewLineだと反応しない
-                {
-                    send = send.Split('\n', '\r')[0];
-                    SendChatMessage();
-                }
-                if(GUI.Button(new Rect(310, 10, 50, 30), "送信"))
-                    SendChatMessage();
+                if(sendResult == null || sendResult.IsCompleted)
+                    if(send != string.Empty && !send.All(c => char.IsWhiteSpace(c)))
+                        //if(send.Contains(Environment.NewLine))
+                        if(send.Contains('\n') || send.Contains('\r'))//なんかEnvironment.NewLineだとダメ
+                            SendChatMessage();
+                //if(GUI.Button(new Rect(310, 10, 50, 30), "送信"))
+                //    SendChatMessage();
                 break;
 
             default:
@@ -130,14 +143,11 @@ public class Chat : MonoBehaviour
 
     private void SendChatMessage()
     {
-        if(sendResult == null || sendResult.IsCompleted)
-            if(send != string.Empty && !send.All(c => char.IsWhiteSpace(c)))
-            {
-                chat.Add(send);
-                sendByte = Encoding.UTF8.GetBytes(send);
-                sendResult = ns.BeginWrite(sendByte, 0, sendByte.Length, WriteCallback, null);
-                send = string.Empty;
-            }
+        chat.Add(send);
+        sendByte = Encoding.Unicode.GetBytes(send);
+        send = string.Empty;
+        sendResult = ns.BeginWrite(sendByte, 0, sendByte.Length, WriteCallback, null);
+        return;
     }
 
     private void WriteCallback(IAsyncResult ar)
@@ -148,7 +158,7 @@ public class Chat : MonoBehaviour
     private void ReadCallback(IAsyncResult ar)
     {
         ns.EndRead(ar);
-        receive = Encoding.UTF8.GetString(receiveByte);
+        receive = Encoding.Unicode.GetString(receiveByte);
         chat.Add(receive);
         receiveByte = new byte[BYTE_SIZE];
     }
