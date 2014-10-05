@@ -41,20 +41,22 @@ public class PacketQueue
     }
 
     /// <summary>
-    /// 指定したサイズのデータを待ち行列に格納する
+    /// 指定したデータを待ち行列に格納する
+    /// データサイズはデータ配列の長さになる
     /// </summary>
     /// <param name="data">パケットデータ</param>
-    /// <param name="size">パケットデータサイズ</param>
-    public void Enqueue(byte[] data, int size)
+    /// <returns>格納したパケットデータのサイズ</returns>
+    public int Enqueue(byte[] data)
     {
-        PacketInfo info = new PacketInfo(size, last_offset);
+        PacketInfo info = new PacketInfo(data.Length, last_offset);
         // パケット格納情報を保存.
         packets_info.Add(info);
         // パケットデータを保存.
         m_stream.Position = last_offset;
-        m_stream.Write(data, 0, size);
+        m_stream.Write(data, 0, data.Length);
         m_stream.Flush();
-        last_offset += size;
+        last_offset += data.Length;
+        return data.Length;
     }
 
     /// <summary>
