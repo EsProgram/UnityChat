@@ -61,15 +61,17 @@ public class PacketQueue
 
     /// <summary>
     /// 待ち行列から1つのパケットを取り出す
+    /// 取り出すパケットがなかった場合は-1が返される
     /// </summary>
     /// <param name="buffer">パケットデータ</param>
-    /// <returns>受け取ったパケットデータのサイズ</returns>
+    /// <returns>
+    /// 受け取ったパケットデータのサイズ
+    /// パケットが存在しなかった場合は-1
+    /// </returns>
     public int Dequeue(ref byte[] buffer)
     {
         if(packets_info.Count <= 0)
-        {
             return -1;
-        }
 
         PacketInfo info = packets_info[0];
 
@@ -86,6 +88,18 @@ public class PacketQueue
             Clear();
 
         return recvSize;
+    }
+
+    /// <summary>
+    /// キューの次に出てくる要素のサイズを返す
+    /// 存在しない場合は-1を返す
+    /// </summary>
+    /// <returns>次のデータのサイズ</returns>
+    public int PeekSize()
+    {
+        if(packets_info.Count == 0)
+            return -1;
+        return packets_info[0].size;
     }
 
     public void Clear()
