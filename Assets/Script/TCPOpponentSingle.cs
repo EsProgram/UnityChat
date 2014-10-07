@@ -26,13 +26,22 @@ public class TCPOpponentSingle
     /// <summary>
     /// 通信相手に接続できていればtrueを返す
     /// </summary>
-    public bool IsConnected { get; private set; }
+    public bool IsConnected
+    {
+        get
+        {
+            return sock == null ? false : sock.Connected;
+        }
+    }
 
     /// <summary>
     /// コンストラクタ
     /// </summary>
     /// <param name="isServer">サーバとして使用するか</param>
-    /// <param name="packetSize">データ送信に用いるパケットサイズ</param>
+    /// <param name="packetSize">
+    /// データ送信に用いるパケットサイズ
+    /// このパケットサイズ以上のデータを送受信しようとすると例外が投げられる
+    /// </param>
     public TCPOpponentSingle(bool isServer, int packetSize = 1024)
     {
         this.isServer = isServer;
@@ -41,10 +50,10 @@ public class TCPOpponentSingle
         sendQueue = new PacketQueue();
         recvQueue = new PacketQueue();
         if(isServer)
-            acc_sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IPv4);
+            acc_sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         else
         {
-            sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IPv4);
+            sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             sock.NoDelay = true;
             sock.SendBufferSize = 0;
         }
@@ -63,7 +72,7 @@ public class TCPOpponentSingle
         try
         {
             acc_sock.Bind(new IPEndPoint(IPAddress.Any, port));
-            acc_sock.Listen(1);
+            acc_sock.Listen(10);
         }
         catch(Exception e)
         {
@@ -85,23 +94,20 @@ public class TCPOpponentSingle
             return false;
 
         //ソケットが待ち受け許可可能状態であれば
-        if(acc_sock.Poll(0, SelectMode.SelectRead))
+        try
         {
-            try
+            //スレッドを起動し、接続待ちさせる
+            Thread thread = new Thread(new ThreadStart(() =>
             {
-                //スレッドを起動し、接続待ちさせる
-                Thread thread = new Thread(new ThreadStart(() =>
-                {
-                    sock = acc_sock.Accept();
-                    IsConnected = true;
-                }));
-                thread.Start();
-            }
-            catch(Exception e)
-            {
-                Debug.Log(e.Message);
-                return false;
-            }
+                sock = acc_sock.Accept();
+                //IsConnected = true;
+            }));
+            thread.Start();
+        }
+        catch(Exception e)
+        {
+            Debug.Log(e.Message);
+            return false;
         }
         return true;
     }
@@ -121,7 +127,7 @@ public class TCPOpponentSingle
             Thread thread = new Thread(new ThreadStart(() =>
             {
                 sock.Connect(remoteEP);
-                IsConnected = true;
+                //IsConnected = true;
             }));
             thread.Start();
         }
@@ -134,6 +140,7 @@ public class TCPOpponentSingle
     }
 
     /// <summary>
+    /// 接続完了後に呼び出し可能
     /// 別スレッドで送受信処理を実行する
     /// 送信バッファに格納されたパケットを送信し
     /// パケットを受信したら受信バッファに格納する
@@ -151,8 +158,10 @@ public class TCPOpponentSingle
                 SendQueueDispach();
                 //受信処理
                 ReceiveQueueDispach();
+                Thread.Sleep(10);
             }
         }));
+        thread.Start();
     }
 
     /// <summary>
@@ -167,9 +176,9 @@ public class TCPOpponentSingle
             //送信バッファからパケットを取り出す
             while((sendSize = sendQueue.Dequeue(ref packet)) > 0)
             {
-                Array.Clear(packet, 0, packet.Length);
                 //パケットの取り出しに成功したらそのパケットを送信する
                 sock.Send(packet, sendSize, SocketFlags.None);
+                Array.Clear(packet, 0, packet.Length);
             }
         }
     }
@@ -196,6 +205,7 @@ public class TCPOpponentSingle
     }
 
     /// <summary>
+    /// 接続完了後に呼び出し可能
     /// 送信データをパケットとしてキューに格納する
     /// </summary>
     /// <param name="data">データ</param>
@@ -203,26 +213,28 @@ public class TCPOpponentSingle
     /// <exception cref="ArgumentException">データ長が0またはパケットサイズを超える場合</exception>
     public int Send(byte[] data)
     {
+        if(!IsConnected)
+            throw new NullReferenceException("接続が完了していません");
+        //送信データがパケット長を超えるか送信データが空であればエラー
         if(data.Length > PACKET_SIZE || data.Length == 0)
             throw new ArgumentException(this.ToString() + " : 送信データのサイズが不正です");
         return sendQueue.Enqueue(data);
     }
 
     /// <summary>
+    /// 接続完了後に呼び出し可能
     /// 受信用キューからパケットデータを取得する
-    /// 取得出来なかった場合はnullを返す
+    /// 取得出来なかった場合は-1を返す
     /// </summary>
-    /// <returns>パケットデータ</returns>
-    public byte[] Receive()
+    /// <returns>パケットデータサイズ</returns>
+    public int Receive(ref byte[] data)
     {
-        byte[] buf;
+        if(!IsConnected)
+            throw new NullReferenceException("接続が完了していません");
+        //キューから取り出すパケットサイズが0より上なら
         if(recvQueue.PeekSize() > 0)
-        {
-            buf = new byte[recvQueue.PeekSize()];
-            recvQueue.Dequeue(ref buf);
-            return buf;
-        }
+            return recvQueue.Dequeue(ref data);
         else
-            return null;
+            return -1;
     }
 }
