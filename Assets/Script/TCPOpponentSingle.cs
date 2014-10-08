@@ -15,10 +15,17 @@ using UnityEngine;
 public class TCPOpponentSingle
 {
     public readonly bool isServer;
+    /// <summary>
+    /// 通信処理で例外が発生した場合に呼ばれるコールバックメソッド
+    /// 通信相手の切断などで接続できなくなった場合などに呼ばれる
+    /// </summary>
+    public event Action OnErrorCommunicateEvent;
+
     private Socket sock;//通信用ソケット
     private Socket acc_sock;//サーバの待ち受け用ソケット
     private PacketQueue sendQueue;//送信用バッファ
     private PacketQueue recvQueue;//受信用バッファ
+    private Thread runWorkThread;//送受信ディスパッチに用いるスレッド
     private volatile bool isRunningWork;//非同期送受信が行われているかどうか
     private readonly int PACKET_SIZE;//送受信に用いるパケット単体のサイズ
     private byte[] packet;//送受信で一時退避に用いる(小さすぎてパケット容量が超過すると例外発生。大きすぎると容量無駄)
@@ -127,7 +134,6 @@ public class TCPOpponentSingle
             Thread thread = new Thread(new ThreadStart(() =>
             {
                 sock.Connect(remoteEP);
-                //IsConnected = true;
             }));
             thread.Start();
         }
@@ -145,23 +151,37 @@ public class TCPOpponentSingle
     /// 送信バッファに格納されたパケットを送信し
     /// パケットを受信したら受信バッファに格納する
     /// </summary>
-    public void RunWorkAsync()
+    /// <returns>送受信スレッド呼び出し成否</returns>
+    public bool RunWorkAsync()
     {
         if(IsConnected)
             isRunningWork = true;
+        else
+            return false;
 
-        Thread thread = new Thread(new ThreadStart(() =>
+        runWorkThread = new Thread(new ThreadStart(() =>
         {
-            while(isRunningWork)
+            try
             {
-                //送信処理
-                SendQueueDispach();
-                //受信処理
-                ReceiveQueueDispach();
-                Thread.Sleep(10);
+                while(isRunningWork)
+                {
+                    //送信処理
+                    SendQueueDispach();
+                    //受信処理
+                    ReceiveQueueDispach();
+                    Thread.Sleep(10);
+                }
+            }
+            catch(Exception e)
+            {
+                Debug.Log(e.Message);
+                DisConnect();
+                if(OnErrorCommunicateEvent != null)
+                    OnErrorCommunicateEvent();
             }
         }));
-        thread.Start();
+        runWorkThread.Start();
+        return true;
     }
 
     /// <summary>
@@ -169,6 +189,8 @@ public class TCPOpponentSingle
     /// </summary>
     private void SendQueueDispach()
     {
+        if(!IsConnected)
+            throw new InvalidOperationException("接続が完了していないためSendQueueDispachを呼び出せません");
         if(sock.Poll(0, SelectMode.SelectWrite))
         {
             int sendSize;//送信するパケットのサイズ
@@ -185,11 +207,11 @@ public class TCPOpponentSingle
 
     /// <summary>
     /// 送られてきたパケットを受信用キューに格納する
-    /// 2つ以上のパケットが送られてきた時にどう動作するかわからん（受け取るのか、たまったままになるか）
-    /// このメソッドは要注意
     /// </summary>
     private void ReceiveQueueDispach()
     {
+        if(!IsConnected)
+            throw new InvalidOperationException("接続が完了していないためReceiveQueueDispatchを呼び出せません");
         //受信可能データが存在したら
         while(sock.Poll(0, SelectMode.SelectRead))
         {
@@ -214,7 +236,7 @@ public class TCPOpponentSingle
     public int Send(byte[] data)
     {
         if(!IsConnected)
-            throw new NullReferenceException("接続が完了していません");
+            throw new InvalidOperationException("接続が完了していないためSendを呼び出せません");
         //送信データがパケット長を超えるか送信データが空であればエラー
         if(data.Length > PACKET_SIZE || data.Length == 0)
             throw new ArgumentException(this.ToString() + " : 送信データのサイズが不正です");
@@ -230,11 +252,26 @@ public class TCPOpponentSingle
     public int Receive(ref byte[] data)
     {
         if(!IsConnected)
-            throw new NullReferenceException("接続が完了していません");
+            throw new InvalidOperationException("接続が完了していないためReceiveを呼び出せません");
         //キューから取り出すパケットサイズが0より上なら
         if(recvQueue.PeekSize() > 0)
             return recvQueue.Dequeue(ref data);
         else
             return -1;
+    }
+
+    /// <summary>
+    /// 接続を解除する
+    /// 接続解除したソケットは再利用可能
+    /// </summary>
+    public void DisConnect()
+    {
+        if(isRunningWork)
+        {
+            isRunningWork = false;
+            runWorkThread.Join();
+        }
+        if(IsConnected)
+            sock.Disconnect(true);
     }
 }

@@ -23,11 +23,6 @@ public class TestUseTcp : MonoBehaviour
         SendAndReceive,
     }
 
-    // Update is called once per frame
-    private void Update()
-    {
-    }
-
     private void OnGUI()
     {
         switch(scene_state)
@@ -49,6 +44,9 @@ public class TestUseTcp : MonoBehaviour
                 break;
 
             case SceneState.WaitConnect:
+                //生成した通信用ソケットに通信障害エラー時のコールバックを追加
+                trans.OnErrorCommunicateEvent += trans_OnErrorCommunicateEvent;
+                //接続待ち状態の表示
                 GUILayout.Label("接続待ちしています");
                 if(trans.IsConnected)
                 {
@@ -73,5 +71,10 @@ public class TestUseTcp : MonoBehaviour
             default:
                 break;
         }
+    }
+
+    private void trans_OnErrorCommunicateEvent()
+    {
+        scene_state = SceneState.SelectRoll;
     }
 }
