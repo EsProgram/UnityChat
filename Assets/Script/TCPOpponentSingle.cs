@@ -271,7 +271,7 @@ public class TCPOpponentSingle
             isRunningWork = false;
             runWorkThread.Join();
         }
-        if(IsConnected)
+        if(sock != null)
             sock.Disconnect(true);
     }
 }

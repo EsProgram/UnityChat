@@ -65,7 +65,6 @@ public class TestUseTcp : MonoBehaviour
 
                 //結果表示
                 GUI.Label(new Rect(1, 100, 150, 40), "受け取った乱数:" + BitConverter.ToInt32(recvMessage, 0));
-                Debug.Log(recvMessage[0]);
                 break;
 
             default:
@@ -75,6 +74,8 @@ public class TestUseTcp : MonoBehaviour
 
     private void trans_OnErrorCommunicateEvent()
     {
+        Debug.Log("Sock Err Event Called");
+        trans.DisConnect();
         scene_state = SceneState.SelectRoll;
     }
 }
