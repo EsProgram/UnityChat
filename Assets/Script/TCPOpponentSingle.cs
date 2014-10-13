@@ -16,10 +16,9 @@ public class TCPOpponentSingle
 {
     public readonly bool isServer;
     /// <summary>
-    /// 通信処理で例外が発生した場合に呼ばれるコールバックメソッド
-    /// 通信相手の切断などで接続できなくなった場合などに呼ばれる
+    /// 送受信スレッドでのエラー発生時に呼び出されるコールバックメソッド
     /// </summary>
-    public event Action OnErrorCommunicateEvent;
+    public event Action OnRunWorkErrorEvent = delegate { };
 
     private Socket sock;//通信用ソケット
     private Socket acc_sock;//サーバの待ち受け用ソケット
@@ -71,11 +70,10 @@ public class TCPOpponentSingle
     /// クライアントの接続が完了するとIsConnectedプロパティがtrueを返す
     /// </summary>
     /// <param name="port">アプリケーションで使用する使用するポート番号</param>
-    /// <returns>クライアント接続待ち受けスレッド起動の成否</returns>
-    public bool StartServer(int port)
+    public void StartServer(int port)
     {
         if(!isServer)
-            return false;
+            return;
         try
         {
             acc_sock.Bind(new IPEndPoint(IPAddress.Any, port));
@@ -83,40 +81,38 @@ public class TCPOpponentSingle
         }
         catch(Exception e)
         {
-            Debug.Log(e.Message);
-            return false;
+            Debug.Log("StartServer : " + e.Message);
         }
 
-        return AcceptAsync();
+        AcceptAsync();
     }
 
     /// <summary>
     /// 別スレッドで接続待ちする
     /// 接続が完了したらIsConnectedプロパティがtrueを返す
+    /// 接続待ちをキャンセルするには
     /// </summary>
-    /// <returns>スレッド起動の成否</returns>
-    private bool AcceptAsync()
+    private void AcceptAsync()
     {
         if(!isServer)
-            return false;
+            return;
 
         //ソケットが待ち受け許可可能状態であれば
         try
         {
             //スレッドを起動し、接続待ちさせる
-            Thread thread = new Thread(new ThreadStart(() =>
+            Thread wait_accept = new Thread(new ThreadStart(() =>
             {
                 sock = acc_sock.Accept();
-                //IsConnected = true;
+                Debug.Log("Server : 接続に成功しました");
             }));
-            thread.Start();
+            wait_accept.Start();
         }
         catch(Exception e)
         {
-            Debug.Log(e.Message);
-            return false;
+            Debug.Log("AcceptAsync" + e.Message);
         }
-        return true;
+        return;
     }
 
     /// <summary>
@@ -124,25 +120,23 @@ public class TCPOpponentSingle
     /// 接続が完了した場合IsConnectedプロパティはtrueを返す
     /// </summary>
     /// <param name="remoteEP">リモートエンドポイント</param>
-    /// <returns>コネクション用スレッド起動の成否</returns>
-    public bool ConnectAsync(IPEndPoint remoteEP)
+    public void ConnectAsync(IPEndPoint remoteEP)
     {
         if(isServer)
-            return false;
+            return;
         try
         {
-            Thread thread = new Thread(new ThreadStart(() =>
+            Thread wait_connect = new Thread(new ThreadStart(() =>
             {
                 sock.Connect(remoteEP);
+                Debug.Log("Client : 接続に成功しました");
             }));
-            thread.Start();
+            wait_connect.Start();
         }
         catch(Exception e)
         {
-            Debug.Log(e.Message);
-            return false;
+            Debug.Log("ConnectAsync : " + e.Message);
         }
-        return true;
     }
 
     /// <summary>
@@ -150,14 +144,18 @@ public class TCPOpponentSingle
     /// 別スレッドで送受信処理を実行する
     /// 送信バッファに格納されたパケットを送信し
     /// パケットを受信したら受信バッファに格納する
+    /// この操作をIsRunningWorkがtrueの間繰り返す
     /// </summary>
-    /// <returns>送受信スレッド呼び出し成否</returns>
-    public bool RunWorkAsync()
+    /// <param name="millisecondsTimeout">スレッドの送受信繰り返しの休憩時間</param>
+    /// <exception cref="InvalidOperationException">接続が確立されていない場合</exception>
+    public void RunWorkAsync(int millisecondsTimeout = 10)
     {
+        if(!IsConnected)
+            throw new InvalidOperationException("ReceiveQueueDispach : 接続が完了していないためReceiveQueueDispatchを呼び出せません");
         if(IsConnected)
             isRunningWork = true;
         else
-            return false;
+            return;
 
         runWorkThread = new Thread(new ThreadStart(() =>
         {
@@ -169,28 +167,24 @@ public class TCPOpponentSingle
                     SendQueueDispach();
                     //受信処理
                     ReceiveQueueDispach();
-                    Thread.Sleep(10);
+                    Thread.Sleep(millisecondsTimeout);
                 }
             }
             catch(Exception e)
             {
-                Debug.Log(e.Message);
-                DisConnect();
-                if(OnErrorCommunicateEvent != null)
-                    OnErrorCommunicateEvent();
+                Debug.Log("RunWorkThreadErr : " + e.Message);
+                OnRunWorkErrorEvent();
             }
         }));
         runWorkThread.Start();
-        return true;
     }
 
     /// <summary>
     /// 送信用キューに溜まっているパケットを送信する
+    /// 接続されていない場合は実行されない
     /// </summary>
     private void SendQueueDispach()
     {
-        if(!IsConnected)
-            throw new InvalidOperationException("接続が完了していないためSendQueueDispachを呼び出せません");
         if(sock.Poll(0, SelectMode.SelectWrite))
         {
             int sendSize;//送信するパケットのサイズ
@@ -207,11 +201,10 @@ public class TCPOpponentSingle
 
     /// <summary>
     /// 送られてきたパケットを受信用キューに格納する
+    /// 接続されていない場合は実行されない
     /// </summary>
     private void ReceiveQueueDispach()
     {
-        if(!IsConnected)
-            throw new InvalidOperationException("接続が完了していないためReceiveQueueDispatchを呼び出せません");
         //受信可能データが存在したら
         while(sock.Poll(0, SelectMode.SelectRead))
         {
@@ -229,14 +222,16 @@ public class TCPOpponentSingle
     /// <summary>
     /// 接続完了後に呼び出し可能
     /// 送信データをパケットとしてキューに格納する
+    /// 送信したデータのサイズを返す
     /// </summary>
     /// <param name="data">データ</param>
     /// <returns>格納したデータのサイズ</returns>
     /// <exception cref="ArgumentException">データ長が0またはパケットサイズを超える場合</exception>
+    /// <exception cref="InvalidOperationException">接続が確立されていない場合</exception>
     public int Send(byte[] data)
     {
         if(!IsConnected)
-            throw new InvalidOperationException("接続が完了していないためSendを呼び出せません");
+            throw new InvalidOperationException("Send : 接続が完了していないためSendを呼び出せません");
         //送信データがパケット長を超えるか送信データが空であればエラー
         if(data.Length > PACKET_SIZE || data.Length == 0)
             throw new ArgumentException(this.ToString() + " : 送信データのサイズが不正です");
@@ -249,6 +244,7 @@ public class TCPOpponentSingle
     /// 取得出来なかった場合は-1を返す
     /// </summary>
     /// <returns>パケットデータサイズ</returns>
+    /// <exception cref="InvalidOperationException">接続が確立されていない場合</exception>
     public int Receive(ref byte[] data)
     {
         if(!IsConnected)
@@ -261,10 +257,9 @@ public class TCPOpponentSingle
     }
 
     /// <summary>
-    /// 接続を解除する
-    /// 接続解除したソケットは再利用可能
+    /// 接続を解除し通信用ソケットをクローズする
     /// </summary>
-    public void DisConnect()
+    public void Close()
     {
         if(isRunningWork)
         {
@@ -272,6 +267,16 @@ public class TCPOpponentSingle
             runWorkThread.Join();
         }
         if(sock != null)
-            sock.Disconnect(true);
+        {
+            if(sock.Connected)
+                sock.Shutdown(SocketShutdown.Both);
+            sock.Close();
+        }
+        if(acc_sock != null)
+        {
+            if(acc_sock.Connected)
+                acc_sock.Shutdown(SocketShutdown.Both);
+            acc_sock.Close();
+        }
     }
 }
