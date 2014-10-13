@@ -16,9 +16,22 @@ public class TCPOpponentSingle
 {
     public readonly bool isServer;
     /// <summary>
-    /// 送受信スレッドでのエラー発生時に呼び出されるコールバックメソッド
+    /// サーバソケット生成エラー発生時に呼び出される
     /// </summary>
-    public event Action OnRunWorkErrorEvent = delegate { };
+    public event Action<Exception> OnStartServerErrorEvent = delegate { };
+    /// <summary>
+    /// サーバの待ち受け処理エラー発生時に呼び出される
+    /// </summary>
+    public event Action<Exception> OnAcceptErrorEvent = delegate { };
+    /// <summary>
+    /// クライアント接続処理エラー発生時に呼び出される
+    /// </summary>
+    public event Action<Exception> OnConnectErrorEvent = delegate { };
+    /// <summary>
+    /// 送受信スレッドでのエラー発生時に呼び出される
+    /// Send/Receiveメソッドでのエラー復旧時などに用いる
+    /// </summary>
+    public event Action<Exception> OnRunWorkErrorEvent = delegate { };
 
     private Socket sock;//通信用ソケット
     private Socket acc_sock;//サーバの待ち受け用ソケット
@@ -45,7 +58,7 @@ public class TCPOpponentSingle
     /// </summary>
     /// <param name="isServer">サーバとして使用するか</param>
     /// <param name="packetSize">
-    /// データ送信に用いるパケットサイズ
+    /// データ送信に用いるパケットの最大長
     /// このパケットサイズ以上のデータを送受信しようとすると例外が投げられる
     /// </param>
     public TCPOpponentSingle(bool isServer, int packetSize = 1024)
@@ -66,6 +79,62 @@ public class TCPOpponentSingle
     }
 
     /// <summary>
+    /// コンストラクタ
+    /// </summary>
+    /// <param name="isServer">サーバとして使用するか</param>
+    /// <param name="OnErr_StartServer">サーバソケット生成エラー時に呼び出されるコールバック</param>
+    /// <param name="OnErr_Accept">サーバ待ち受け処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="OnErr_Connect">クライアント接続処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="OnErr_RunWork">送受信処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="packetSize">
+    /// データ送信に用いるパケットの最大長
+    /// このパケットサイズ以上のデータを送受信しようとすると例外が投げられる
+    /// </param>
+    private TCPOpponentSingle(bool isServer,
+                             Action<Exception> OnErr_StartServer,
+                             Action<Exception> OnErr_Accept,
+                             Action<Exception> OnErr_Connect,
+                             Action<Exception> OnErr_RunWork,
+                             int packetSize = 1024)
+        : this(isServer, packetSize)
+    {
+        OnStartServerErrorEvent += OnErr_StartServer;
+        OnAcceptErrorEvent += OnErr_Accept;
+        OnConnectErrorEvent += OnErr_Connect;
+        OnRunWorkErrorEvent += OnErr_RunWork;
+    }
+
+    /// <summary>
+    /// サーバ用コンストラクタ
+    /// </summary>
+    /// <param name="OnErr_StartServer">サーバソケット生成エラー時に呼び出されるコールバック</param>
+    /// <param name="OnErr_Accept">サーバ待ち受け処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="OnErr_RunWork">送受信処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="packetSize">
+    /// データ送信に用いるパケットの最大長
+    /// このパケットサイズ以上のデータを送受信しようとすると例外が投げられる
+    /// </param>
+    public TCPOpponentSingle(Action<Exception> OnErr_StartServer,
+                             Action<Exception> OnErr_Accept,
+                             Action<Exception> OnErr_RunWork,
+                             int packetSize = 1024)
+        : this(true, OnErr_StartServer, OnErr_Accept, null, OnErr_RunWork, packetSize) { }
+
+    /// <summary>
+    /// クライアント用コンストラクタ
+    /// </summary>
+    /// <param name="OnErr_Connect">クライアント接続処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="OnErr_RunWork">送受信処理エラー発生時に呼び出されるコールバック</param>
+    /// <param name="packetSize">
+    /// データ送信に用いるパケットの最大長
+    /// このパケットサイズ以上のデータを送受信しようとすると例外が投げられる
+    /// </param>
+    public TCPOpponentSingle(Action<Exception> OnErr_Connect,
+                             Action<Exception> OnErr_RunWork,
+                             int packetSize = 1024)
+        : this(false, null, null, OnErr_Connect, OnErr_RunWork, packetSize) { }
+
+    /// <summary>
     /// サーバの待ち受けを開始する
     /// クライアントの接続が完了するとIsConnectedプロパティがtrueを返す
     /// </summary>
@@ -77,11 +146,11 @@ public class TCPOpponentSingle
         try
         {
             acc_sock.Bind(new IPEndPoint(IPAddress.Any, port));
-            acc_sock.Listen(10);
+            acc_sock.Listen(0);
         }
         catch(Exception e)
         {
-            Debug.Log("StartServer : " + e.Message);
+            OnStartServerErrorEvent(e);
         }
 
         AcceptAsync();
@@ -110,7 +179,7 @@ public class TCPOpponentSingle
         }
         catch(Exception e)
         {
-            Debug.Log("AcceptAsync" + e.Message);
+            OnAcceptErrorEvent(e);
         }
         return;
     }
@@ -135,7 +204,7 @@ public class TCPOpponentSingle
         }
         catch(Exception e)
         {
-            Debug.Log("ConnectAsync : " + e.Message);
+            OnConnectErrorEvent(e);
         }
     }
 
@@ -147,7 +216,7 @@ public class TCPOpponentSingle
     /// この操作をIsRunningWorkがtrueの間繰り返す
     /// </summary>
     /// <param name="millisecondsTimeout">スレッドの送受信繰り返しの休憩時間</param>
-    /// <exception cref="InvalidOperationException">接続が確立されていない場合</exception>
+    /// <exception cref="InvalidOperationException">接続が確立されていない場合(通信相手が遮断されているかを判断できるのはSendメソッド実行時時のみ)</exception>
     public void RunWorkAsync(int millisecondsTimeout = 10)
     {
         if(!IsConnected)
@@ -172,8 +241,7 @@ public class TCPOpponentSingle
             }
             catch(Exception e)
             {
-                Debug.Log("RunWorkThreadErr : " + e.Message);
-                OnRunWorkErrorEvent();
+                OnRunWorkErrorEvent(e);
             }
         }));
         runWorkThread.Start();

@@ -31,18 +31,18 @@ public class TestUseTcp : MonoBehaviour
             case SceneState.SelectRoll:
                 if(GUI.Button(new Rect(1, 1, 150, 40), "サーバになる"))
                 {
-                    trans = new TCPOpponentSingle(true, PACKET_SIZE);
+                    trans = new TCPOpponentSingle(OnErrStartServer, OnErrAccept, OnErrRunWork, PACKET_SIZE);
+
                     trans.StartServer(54321);
                     scene_state = SceneState.WaitConnect;
-                    trans.OnRunWorkErrorEvent += trans_OnRunWorkErrorEvent;
                     timer = Time.time;
                 }
                 if(GUI.Button(new Rect(1, 50, 150, 40), "クライアントになる"))
                 {
-                    trans = new TCPOpponentSingle(false, PACKET_SIZE);
+                    trans = new TCPOpponentSingle(OnErrConnect, OnErrRunWork, PACKET_SIZE);
+
                     trans.ConnectAsync(new IPEndPoint(IPAddress.Loopback, 54321));
                     scene_state = SceneState.WaitConnect;
-                    trans.OnRunWorkErrorEvent += trans_OnRunWorkErrorEvent;
                     timer = Time.time;
                 }
 
@@ -115,8 +115,30 @@ public class TestUseTcp : MonoBehaviour
         }
     }
 
-    private void trans_OnRunWorkErrorEvent()
+    private void OnErrStartServer(Exception e)
     {
+        Debug.Log("StartServer : " + e.Message);
+        trans.Close();
+        scene_state = SceneState.SelectRoll;
+    }
+
+    private void OnErrConnect(Exception e)
+    {
+        Debug.Log("ConnectAsync : " + e.Message);
+        trans.Close();
+        scene_state = SceneState.SelectRoll;
+    }
+
+    private void OnErrAccept(Exception e)
+    {
+        Debug.Log("AcceptAsync" + e.Message);
+        trans.Close();
+        scene_state = SceneState.SelectRoll;
+    }
+
+    private void OnErrRunWork(Exception e)
+    {
+        Debug.Log("RunWorkThreadErr : " + e.Message);
         trans.Close();
         scene_state = SceneState.SelectRoll;
     }
