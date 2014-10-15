@@ -38,7 +38,9 @@ public class TCPOpponentSingle
     private PacketQueue sendQueue;//送信用バッファ
     private PacketQueue recvQueue;//受信用バッファ
     private Thread runWorkThread;//送受信ディスパッチに用いるスレッド
+    private Thread waitAcceptThread;//待ち受けスレッド
     private volatile bool isRunningWork;//非同期送受信が行われているかどうか
+    private volatile bool isAccepting;//待ち受け状態かどうか
     private readonly int PACKET_SIZE;//送受信に用いるパケット単体のサイズ
     private byte[] packet;//送受信で一時退避に用いる(小さすぎてパケット容量が超過すると例外発生。大きすぎると容量無駄)
 
@@ -146,7 +148,7 @@ public class TCPOpponentSingle
         try
         {
             acc_sock.Bind(new IPEndPoint(IPAddress.Any, port));
-            acc_sock.Listen(0);
+            acc_sock.Listen(10);
         }
         catch(Exception e)
         {
@@ -165,17 +167,24 @@ public class TCPOpponentSingle
     {
         if(!isServer)
             return;
+        isAccepting = true;
 
         //ソケットが待ち受け許可可能状態であれば
         try
         {
             //スレッドを起動し、接続待ちさせる
-            Thread wait_accept = new Thread(new ThreadStart(() =>
+            waitAcceptThread = new Thread(new ThreadStart(() =>
             {
-                sock = acc_sock.Accept();
-                Debug.Log("Server : 接続に成功しました");
+                while(isAccepting)
+                {
+                    if(sock == null)
+                        sock = acc_sock.Accept();
+                    else
+                        acc_sock.Accept().Close();
+                    Thread.Sleep(100);
+                }
             }));
-            wait_accept.Start();
+            waitAcceptThread.Start();
         }
         catch(Exception e)
         {
@@ -346,5 +355,27 @@ public class TCPOpponentSingle
                 acc_sock.Shutdown(SocketShutdown.Both);
             acc_sock.Close();
         }
+    }
+
+    /// <summary>
+    /// 送受信スレッドを終了
+    /// </summary>
+    public void EndRunWork()
+    {
+        isRunningWork = false;
+        if(runWorkThread.IsAlive)
+            runWorkThread.Join();
+    }
+
+    /// <summary>
+    /// 待ち受けを終了
+    /// </summary>
+    public void EndAccept()
+    {
+        isAccepting = false;
+        if(waitAcceptThread.IsAlive)
+            waitAcceptThread.Join();
+        acc_sock.Close();
+        acc_sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 }

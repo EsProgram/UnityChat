@@ -75,29 +75,11 @@ public class TestUseTcp : MonoBehaviour
             case SceneState.SendAndReceive:
                 //Sendテスト
                 if(GUI.Button(new Rect(1, 1, 150, 40), "乱数を送る"))
-                    try
-                    {
-                        trans.Send(BitConverter.GetBytes(UnityEngine.Random.Range(int.MinValue, int.MaxValue)));
-                    }
-                    catch(Exception e)
-                    {
-                        Console.WriteLine("Send : " + e.Message);
-                        trans.Close();
-                        scene_state = SceneState.SelectRoll;
-                    }
+                    trans.Send(BitConverter.GetBytes(UnityEngine.Random.Range(int.MinValue, int.MaxValue)));
 
                 //Receiveテスト
                 if(GUI.Button(new Rect(1, 50, 150, 40), "乱数を受け取る"))
-                    try
-                    {
-                        trans.Receive(ref recvMessage);
-                    }
-                    catch(Exception e)
-                    {
-                        Console.WriteLine("Receive : " + e.Message);
-                        trans.Close();
-                        scene_state = SceneState.SelectRoll;
-                    }
+                    trans.Receive(ref recvMessage);
 
                 //結果表示
                 GUI.Label(new Rect(1, 100, 150, 40), "受け取った乱数:" + BitConverter.ToInt32(recvMessage, 0));
